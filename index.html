@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0ABAB5">
+<meta name="description" content="Lista de compras inteligente baseada em estoque ideal.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Lista Fácil">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Lista Fácil</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    /* Paleta Tiffany / pastel */
+    --verde: #0ABAB5;          /* azul tiffany (primária) */
+    --verde-escuro: #089A95;   /* tiffany escuro (active) */
+    --verde-claro: #A7E8E5;    /* tiffany claro (acentos) */
+    --tiffany-suave: #D1F1EF;  /* gradiente do header / pastel forte */
+    --verde-pastel: #D1FAE5;   /* mint (estado: no carrinho) */
+    --amarelo-claro: #FEF3C7;  /* pastel quente (precisa comprar) */
+    --laranja: #F97316;        /* destaque "comprar" */
+    --vermelho: #DC2626;
+    --vermelho-claro: #FEE2E2;
+    --cinza-bg: #E8F5F4;       /* fundo pastel tiffany */
+    --cinza-borda: #C5DEDB;    /* borda com leve tom tiffany */
+    --cinza-texto: #4b5563;
+    --cinza-claro: #F5FBFA;
+    --azul-info: #0F766E;      /* teal escuro (info "ideal") */
+    --branco: #ffffff;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #111827; background: var(--cinza-bg);
+    overscroll-behavior-y: contain;
+    -webkit-user-select: none; user-select: none;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+    min-height: 100vh; min-height: 100dvh;
+    max-width: 720px; margin: 0 auto;
+    position: relative;
+  }
+  input, textarea, select { -webkit-user-select: text; user-select: text; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; }
+  input, select { font-family: inherit; font-size: 16px; }
+
+  /* Cabeçalho fixo */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--verde); color: white;
+    padding: 12px 14px; display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding-top: calc(12px + env(safe-area-inset-top));
+    padding-left: calc(14px + env(safe-area-inset-left));
+    padding-right: calc(14px + env(safe-area-inset-right));
+  }
+  .topbar .logo { font-size: 18px; font-weight: 700; flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .topbar .logo .emoji { font-size: 22px; }
+  .topbar .logo .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar-btn {
+    color: white; padding: 8px 12px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    background: rgba(255,255,255,0.18); min-height: 40px; display: flex; align-items: center; gap: 4px;
+    flex-shrink: 0;
+  }
+  .topbar-btn:active { background: rgba(255,255,255,0.32); }
+  .topbar-btn.icon-only { padding: 8px 10px; font-size: 20px; }
+  .topbar-btn.instalar { background: white; color: var(--verde-escuro); display: none; }
+  .topbar-btn.instalar.disponivel { display: flex; }
+
+  /* Barra de filtros */
+  .filters {
+    position: sticky; top: 60px; z-index: 40;
+    background: var(--branco); padding: 10px 12px; display: flex; gap: 8px;
+    overflow-x: auto; white-space: nowrap;
+    border-bottom: 1px solid var(--cinza-borda);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 8px 14px; border-radius: 20px;
+    background: var(--cinza-bg); color: var(--cinza-texto);
+    font-size: 13px; font-weight: 600;
+    border: 1px solid transparent;
+    min-height: 36px;
+  }
+  .chip.ativo { background: var(--verde); color: white; border-color: var(--verde-escuro); }
+  .chip:active { transform: scale(0.96); }
+  .chip-limpar { color: var(--vermelho); background: transparent; border: 1px solid var(--vermelho); }
+
+  /* Conteúdo principal */
+  main { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+  .grupo-card {
+    background: var(--branco); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .grupo-header {
+    width: 100%; padding: 14px 14px; display: flex; align-items: center; gap: 10px;
+    text-align: left; background: var(--branco); border-bottom: 1px solid transparent;
+    min-height: 56px;
+  }
+  .grupo-card.aberto .grupo-header { border-bottom-color: var(--cinza-borda); }
+  .grupo-header:active { background: var(--cinza-claro); }
+  .grupo-icone { font-size: 24px; }
+  .grupo-nome { flex: 1; font-size: 16px; font-weight: 700; color: #111827; }
+  .grupo-contagem {
+    background: var(--cinza-bg); color: var(--cinza-texto);
+    padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;
+  }
+  .grupo-seta { color: var(--cinza-texto); font-size: 12px; }
+
+  .grupo-produtos { display: flex; flex-direction: column; }
+  .empty-grupo { padding: 14px; color: var(--cinza-texto); font-size: 13px; text-align: center; font-style: italic; }
+
+  /* Produto */
+  .produto {
+    padding: 10px 14px; border-bottom: 1px solid var(--cinza-borda);
+    display: flex; flex-direction: column; gap: 8px;
+    background: var(--branco);
+  }
+  .produto:last-child { border-bottom: none; }
+  .produto.precisa-comprar { background: var(--amarelo-claro); }
+  .produto.no-carrinho { background: var(--verde-claro); }
+
+  .produto-linha1 { display: flex; align-items: center; gap: 8px; }
+  .produto-nome { flex: 1; font-size: 15px; font-weight: 600; color: #111827; line-height: 1.3; word-break: break-word; }
+  .btn-icone {
+    padding: 6px; font-size: 16px; border-radius: 6px;
+    min-width: 32px; min-height: 32px;
+  }
+  .btn-icone:active { background: var(--cinza-bg); }
+
+  .produto-linha2 {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr auto;
+    gap: 8px; align-items: center;
+  }
+  .controle-qtd {
+    display: inline-flex; align-items: center;
+    background: var(--cinza-bg); border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--cinza-borda);
+  }
+  .btn-qtd {
+    min-width: 36px; min-height: 36px; font-size: 18px; font-weight: 700;
+    color: var(--verde-escuro); padding: 0 4px;
+  }
+  .btn-qtd:active { background: var(--cinza-borda); }
+  .qtd-atual {
+    min-width: 32px; text-align: center; font-size: 15px; font-weight: 700;
+    color: #111827; padding: 0 4px;
+  }
+  .info-stock, .info-comprar {
+    font-size: 12px; color: var(--cinza-texto); text-align: center;
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .info-comprar .info-val { font-size: 18px; font-weight: 700; color: var(--cinza-texto); }
+  .info-stock .info-val { font-size: 16px; font-weight: 700; color: var(--azul-info); }
+  .info-comprar.destaque .info-val { color: var(--laranja); }
+  .check {
+    min-width: 44px; min-height: 44px; border-radius: 50%;
+    background: var(--branco); border: 2px solid var(--cinza-borda);
+    font-size: 22px; font-weight: 700; color: var(--branco);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .check.marcado { background: var(--verde); border-color: var(--verde-escuro); }
+  .check:active { transform: scale(0.92); }
+
+  /* Estado vazio */
+  .empty-state {
+    padding: 40px 20px; text-align: center; color: var(--cinza-texto);
+  }
+  .empty-state .icone-grande { font-size: 48px; margin-bottom: 10px; }
+  .empty-state p { margin: 8px 0 16px 0; font-size: 14px; }
+  .empty-state .btn-primario {
+    background: var(--verde); color: white; padding: 12px 20px; border-radius: 8px;
+    font-size: 14px; font-weight: 600;
+  }
+
+  /* Modais */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100;
+    display: none; align-items: flex-end; justify-content: center;
+  }
+  .modal-overlay.aberto { display: flex; }
+  .modal {
+    background: var(--branco); width: 100%; max-width: 600px;
+    border-radius: 16px 16px 0 0; max-height: 90vh; overflow-y: auto;
+    padding: 18px; padding-bottom: 30px;
+  }
+  .modal-titulo {
+    font-size: 18px; font-weight: 700; margin: 0 0 14px 0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-titulo button { font-size: 24px; color: var(--cinza-texto); padding: 4px 8px; }
+  .form-grupo { margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .form-grupo label { font-size: 13px; font-weight: 600; color: var(--cinza-texto); }
+  .form-grupo input, .form-grupo select {
+    padding: 12px; border: 1px solid var(--cinza-borda); border-radius: 8px;
+    font-size: 16px; width: 100%; background: var(--branco);
+  }
+  .form-grupo input:focus, .form-grupo select:focus { outline: 2px solid var(--verde); outline-offset: -1px; border-color: var(--verde); }
+  .modal-acoes {
+    display: flex; gap: 8px; margin-top: 16px;
+  }
+  .btn-primario {
+    flex: 1; background: var(--verde); color: white; padding: 14px;
+    border-radius: 8px; font-size: 15px; font-weight: 700; min-height: 48px;
+  }
+  .btn-primario:active { background: var(--verde-escuro); }
+  .btn-secundario {
+    flex: 1; background: var(--cinza-bg); color: var(--cinza-texto);
+    padding: 14px; border-radius: 8px; font-size: 15px; font-weight: 600; min-height: 48px;
+  }
+  .btn-perigo {
+    background: var(--vermelho); color: white; padding: 14px; border-radius: 8px;
+    font-size: 15px; font-weight: 700;
+  }
+
+  /* Emoji picker */
+  .emoji-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;
+    margin-top: 6px;
+  }
+  .emoji-opt {
+    aspect-ratio: 1; font-size: 26px; border-radius: 8px;
+    background: var(--cinza-bg); display: flex; align-items: center; justify-content: center;
+    border: 2px solid transparent;
+  }
+  .emoji-opt.selecionado { border-color: var(--verde); background: var(--verde-claro); }
+  .emoji-opt:active { background: var(--cinza-borda); }
+  .emoji-custom {
+    width: 100%; padding: 10px; text-align: center; font-size: 18px;
+    border: 1px solid var(--cinza-borda); border-radius: 8px; margin-top: 8px;
+  }
+
+  /* Lista de grupos no modal */
+  .lista-grupos { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .item-grupo {
+    display: flex; align-items: center; gap: 8px; padding: 10px;
+    background: var(--cinza-claro); border-radius: 8px;
+  }
+  .item-grupo .nome-input {
+    flex: 1; padding: 8px 10px; border: 1px solid var(--cinza-borda); border-radius: 6px; font-size: 15px;
+  }
+  .item-grupo .emoji-show { font-size: 22px; }
+  .item-grupo .acoes { display: flex; gap: 4px; }
+  .item-grupo button {
+    min-width: 36px; min-height: 36px; border-radius: 6px;
+    font-size: 16px; color: var(--cinza-texto);
+  }
+  .item-grupo button:active { background: var(--cinza-borda); }
+
+  /* Menu dropdown */
+  .menu-dropdown {
+    position: absolute; top: 56px; right: 8px; z-index: 60;
+    background: var(--branco); border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    min-width: 220px; padding: 6px 0;
+    display: none;
+  }
+  .menu-dropdown.aberto { display: block; }
+  .menu-item {
+    width: 100%; padding: 12px 16px; text-align: left; font-size: 14px;
+    display: flex; align-items: center; gap: 10px;
+    color: #111827;
+  }
+  .menu-item:active { background: var(--cinza-bg); }
+  .menu-item.perigo { color: var(--vermelho); }
+  .menu-divisor { height: 1px; background: var(--cinza-borda); margin: 4px 0; }
+
+  /* Resumo no rodapé sticky */
+  .resumo {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+    background: var(--branco); border-top: 1px solid var(--cinza-borda);
+    padding: 10px 14px; display: flex; justify-content: space-around;
+    font-size: 12px; color: var(--cinza-texto);
+    box-shadow: 0 -2px 6px rgba(0,0,0,0.04);
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    padding-left: calc(14px + env(safe-area-inset-left));
+    padding-right: calc(14px + env(safe-area-inset-right));
+    max-width: 720px; margin: 0 auto;
+  }
+  .resumo-item { text-align: center; }
+  .resumo-item .valor { display: block; font-size: 16px; font-weight: 700; color: #111827; }
+  .resumo-item.destaque .valor { color: var(--laranja); }
+  .resumo-item.verde .valor { color: var(--verde); }
+
+  /* Toast de instalação iOS */
+  .ios-instalar-dica {
+    position: fixed; left: 12px; right: 12px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    z-index: 70; background: #111827; color: white;
+    padding: 14px 16px; border-radius: 12px;
+    font-size: 13px; line-height: 1.4;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    display: none; align-items: flex-start; gap: 10px;
+    max-width: 696px; margin: 0 auto;
+  }
+  .ios-instalar-dica.visivel { display: flex; }
+  .ios-instalar-dica .texto { flex: 1; }
+  .ios-instalar-dica button { color: white; font-size: 18px; padding: 0 4px; }
+
+  /* === Tela de Login / Cadastro === */
+  .tela-login {
+    position: fixed; inset: 0; z-index: 9999;
+    background: linear-gradient(160deg, var(--verde-claro) 0%, var(--cinza-bg) 60%, var(--tiffany-suave) 100%);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    padding-top: calc(24px + env(safe-area-inset-top));
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    padding-left: calc(24px + env(safe-area-inset-left));
+    padding-right: calc(24px + env(safe-area-inset-right));
+    overflow-y: auto;
+    animation: fadeIn 0.3s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .login-card {
+    background: var(--branco);
+    border-radius: 24px;
+    box-shadow: 0 20px 50px rgba(10, 186, 181, 0.18), 0 4px 12px rgba(10, 186, 181, 0.08);
+    padding: 32px 24px;
+    width: 100%; max-width: 380px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .login-logo {
+    width: 84px; height: 84px;
+    background: linear-gradient(135deg, var(--verde) 0%, var(--verde-escuro) 100%);
+    border-radius: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 44px;
+    margin: 0 auto 4px;
+    box-shadow: 0 8px 20px rgba(10, 186, 181, 0.32);
+  }
+  .login-titulo {
+    font-size: 26px; font-weight: 800; margin: 0;
+    text-align: center; color: #0F172A;
+    letter-spacing: -0.5px;
+  }
+  .login-subtitulo {
+    font-size: 14px; color: var(--cinza-texto);
+    margin: -10px 0 12px 0;
+    text-align: center;
+  }
+  .login-form { display: flex; flex-direction: column; gap: 12px; }
+  .login-form .campo { display: flex; flex-direction: column; gap: 5px; }
+  .login-form .campo label {
+    font-size: 13px; font-weight: 600; color: var(--cinza-texto);
+  }
+  .login-form .campo input {
+    padding: 14px;
+    border: 1.5px solid var(--cinza-borda); border-radius: 12px;
+    font-size: 16px; background: var(--cinza-claro); color: #111827;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  .login-form .campo input:focus {
+    outline: none; border-color: var(--verde); background: var(--branco);
+    box-shadow: 0 0 0 4px rgba(10, 186, 181, 0.15);
+  }
+  .campo-senha { position: relative; }
+  .campo-senha input { padding-right: 50px; }
+  .campo-senha .toggle-senha {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    width: 42px; height: 42px; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; color: var(--cinza-texto);
+  }
+  .campo-senha .toggle-senha:active { background: var(--cinza-bg); }
+  .login-erro {
+    background: var(--vermelho-claro); color: var(--vermelho);
+    padding: 11px 12px; border-radius: 10px; font-size: 13px;
+    text-align: center; margin: 0; font-weight: 600;
+    border: 1px solid #FCA5A5;
+  }
+  .login-erro.sucesso {
+    background: var(--verde-pastel); color: #065F46;
+    border-color: #6EE7B7;
+  }
+  .login-erro.info {
+    background: var(--tiffany-suave); color: var(--azul-info);
+    border-color: var(--verde-claro);
+  }
+
+  /* Indicador de sincronização no header */
+  .sync-status {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: transparent; margin-right: 4px;
+    transition: background 0.2s;
+  }
+  .sync-status.sincronizando { background: #FBBF24; animation: pulse-sync 1s ease-in-out infinite; }
+  .sync-status.erro { background: var(--vermelho); }
+  .sync-status.offline { background: #9CA3AF; }
+  @keyframes pulse-sync { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+  .login-btn {
+    background: var(--verde); color: white;
+    padding: 15px; border-radius: 12px;
+    font-size: 15px; font-weight: 700;
+    margin-top: 4px; min-height: 50px;
+    box-shadow: 0 4px 12px rgba(10, 186, 181, 0.28);
+    transition: transform 0.05s, box-shadow 0.15s;
+  }
+  .login-btn:active {
+    background: var(--verde-escuro);
+    transform: scale(0.985);
+    box-shadow: 0 2px 6px rgba(10, 186, 181, 0.22);
+  }
+  .login-rodape {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font-size: 13px; color: var(--cinza-texto);
+    margin-top: 6px; flex-wrap: wrap;
+  }
+  .login-rodape p { margin: 0; }
+  .login-link {
+    color: var(--verde-escuro); font-weight: 700;
+    padding: 6px 8px; font-size: 13px;
+    text-decoration: underline; text-underline-offset: 2px;
+  }
+  .login-link:active { color: var(--verde); }
+  .login-reset {
+    font-size: 12px; color: var(--cinza-texto);
+    text-decoration: underline; text-align: center;
+    padding: 8px; margin-top: 2px;
+  }
+  .login-aviso {
+    font-size: 11px; color: var(--cinza-texto);
+    text-align: center; margin: 6px 0 0 0; line-height: 1.4;
+    opacity: 0.75;
+  }
+
+  body.com-login { overflow: hidden; }
+
+  /* === Responsividade === */
+
+  /* Telas muito pequenas (≤ 360px) */
+  @media (max-width: 360px) {
+    .topbar { padding: 10px 8px; gap: 4px; padding-top: calc(10px + env(safe-area-inset-top)); }
+    .topbar .logo { font-size: 15px; }
+    .topbar .logo .emoji { font-size: 19px; }
+    .topbar-btn { padding: 8px 9px; font-size: 13px; min-height: 38px; }
+    .topbar-btn.icon-only { padding: 8px 8px; font-size: 18px; }
+    main { padding: 8px; }
+    .grupo-card { border-radius: 10px; }
+    .grupo-header { padding: 12px 10px; min-height: 52px; }
+    .grupo-icone { font-size: 22px; }
+    .grupo-nome { font-size: 15px; }
+    .produto { padding: 9px 10px; }
+    .produto-nome { font-size: 14px; }
+    .produto-linha2 { gap: 6px; }
+    .btn-qtd { min-width: 34px; min-height: 34px; font-size: 17px; }
+    .qtd-atual { min-width: 26px; font-size: 14px; }
+    .info-stock .info-val { font-size: 14px; }
+    .info-comprar .info-val { font-size: 16px; }
+    .info-stock, .info-comprar { font-size: 11px; }
+    .check { min-width: 40px; min-height: 40px; font-size: 20px; }
+    .chip { font-size: 12px; padding: 7px 12px; min-height: 34px; }
+    .resumo-item .valor { font-size: 15px; }
+    .resumo-item { font-size: 11px; }
+  }
+
+  /* Telas médias (≥ 480px) */
+  @media (min-width: 480px) {
+    .produto-linha2 { gap: 14px; }
+    .grupo-header { padding: 16px 16px; }
+    .produto { padding: 12px 16px; }
+  }
+
+  /* Telas grandes / tablet (≥ 720px) - layout centralizado */
+  @media (min-width: 720px) {
+    body { background: linear-gradient(180deg, #16a34a 0%, #16a34a 60px, var(--cinza-bg) 60px); }
+    main { padding: 16px; gap: 12px; }
+    .grupo-card { border-radius: 14px; }
+    .emoji-grid { grid-template-columns: repeat(8, 1fr); }
+  }
+
+  /* Modo standalone (app instalado) */
+  @media (display-mode: standalone) {
+    body { background: var(--cinza-bg); }
+  }
+</style>
+</head>
+<body class="com-login">
+
+<div class="tela-login" id="tela-login">
+  <div class="login-card">
+    <div class="login-logo">🛒</div>
+    <h1 class="login-titulo">Lista Fácil</h1>
+    <p class="login-subtitulo" id="login-subtitulo">Lista de compras pessoal</p>
+
+    <form id="form-auth" class="login-form" autocomplete="on">
+      <div class="campo">
+        <label for="login-usuario">Email</label>
+        <input id="login-usuario" type="email" required autocomplete="email"
+               autocapitalize="off" autocorrect="off" spellcheck="false"
+               inputmode="email" maxlength="120" placeholder="seu@email.com">
+      </div>
+      <div class="campo">
+        <label for="login-senha">Senha</label>
+        <div class="campo-senha">
+          <input id="login-senha" type="password" required
+                 autocomplete="current-password" maxlength="72"
+                 placeholder="Sua senha">
+          <button type="button" class="toggle-senha" id="btn-mostrar-senha" aria-label="Mostrar/ocultar senha">👁️</button>
+        </div>
+      </div>
+      <p id="login-msg" class="login-erro" style="display:none"></p>
+      <button type="submit" id="btn-submit-auth" class="login-btn">Entrar</button>
+    </form>
+
+    <div class="login-rodape">
+      <p id="login-rodape-texto">Primeiro acesso?</p>
+      <button type="button" id="btn-toggle-modo" class="login-link">Criar conta</button>
+    </div>
+
+    <button type="button" id="btn-resetar" class="login-reset">
+      Esqueci minha senha
+    </button>
+
+    <p class="login-aviso">🔒 Sua lista fica salva na nuvem e sincroniza entre celular e computador</p>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="logo">
+    <span class="emoji">🛒</span>
+    <span class="label">Lista Fácil</span>
+    <span class="sync-status" id="sync-status" title=""></span>
+  </div>
+  <button class="topbar-btn instalar" id="btn-instalar" onclick="instalarApp()" aria-label="Instalar app">⬇️ Instalar</button>
+  <button class="topbar-btn" onclick="abrirModalProduto()">+ Produto</button>
+  <button class="topbar-btn icon-only" onclick="abrirModalGrupos()" aria-label="Gerenciar grupos">📂</button>
+  <button class="topbar-btn icon-only" onclick="toggleMenu(event)" aria-label="Menu">⋮</button>
+</header>
+
+<div class="ios-instalar-dica" id="ios-dica">
+  <span style="font-size: 22px;">📲</span>
+  <div class="texto">
+    Para instalar este app no iPhone: toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>.
+  </div>
+  <button onclick="fecharDicaIOS()" aria-label="Fechar">✕</button>
+</div>
+
+<div class="menu-dropdown" id="menu-dropdown">
+  <div class="menu-item" id="menu-usuario" style="font-size:12px; color:var(--cinza-texto); pointer-events:none; padding-bottom:8px;">
+    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" id="menu-usuario-email">—</span>
+  </div>
+  <div class="menu-divisor"></div>
+  <button class="menu-item" onclick="expandirTudo()">⬇️ Expandir todos os grupos</button>
+  <button class="menu-item" onclick="recolherTudo()">⬆️ Recolher todos os grupos</button>
+  <div class="menu-divisor"></div>
+  <button class="menu-item" onclick="exportarJSON()">💾 Exportar dados (backup)</button>
+  <button class="menu-item" onclick="importarJSON()">📥 Importar dados</button>
+  <div class="menu-divisor"></div>
+  <button class="menu-item perigo" onclick="zerarCarrinho()">↩️ Desmarcar carrinho</button>
+  <button class="menu-item perigo" onclick="zerarEstoqueAtual()">0️⃣ Zerar estoque atual</button>
+  <div class="menu-divisor"></div>
+  <button class="menu-item" onclick="fazerLogout()">🔒 Sair da conta</button>
+</div>
+
+<div class="filters">
+  <button class="chip" data-filtro="precisaComprar" onclick="toggleFiltro('precisaComprar')">🛍️ Precisa comprar</button>
+  <button class="chip" data-filtro="faltamCarrinho" onclick="toggleFiltro('faltamCarrinho')">⬜ Faltam no carrinho</button>
+  <button class="chip" data-filtro="jaCarrinho" onclick="toggleFiltro('jaCarrinho')">✅ Já no carrinho</button>
+  <button class="chip chip-limpar" id="btn-limpar-filtros" onclick="limparFiltros()" style="display:none">✕ Limpar</button>
+</div>
+
+<main id="lista"></main>
+
+<div class="resumo" id="resumo">
+  <div class="resumo-item">
+    <span class="valor" id="resumo-total">0</span>
+    Produtos
+  </div>
+  <div class="resumo-item destaque">
+    <span class="valor" id="resumo-comprar">0</span>
+    Comprar
+  </div>
+  <div class="resumo-item verde">
+    <span class="valor" id="resumo-carrinho">0</span>
+    No carrinho
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay"></div>
+
+<script>
+'use strict';
+
+const STORAGE_KEY = 'listaCompras:v1';
+
+/* ===== SUPABASE ===== */
+const SUPABASE_URL  = 'https://veyelarpyjohoeifyopb.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZleWVsYXJweWpvaG9laWZ5b3BiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTkyNzIsImV4cCI6MjA5NTQ5NTI3Mn0.sCKVi1sUpjF565kaQQhQsFnUAS7XsM8CZSef0hIcLCk';
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' }
+});
+
+let currentUser = null;
+
+const EMOJIS_PADRAO = [
+  { e: '🥩', nome: 'Açougue' },
+  { e: '🐟', nome: 'Peixaria' },
+  { e: '🥖', nome: 'Padaria' },
+  { e: '🥤', nome: 'Bebidas' },
+  { e: '🍷', nome: 'Adega' },
+  { e: '🧀', nome: 'Laticínios' },
+  { e: '🥬', nome: 'Hortifruti' },
+  { e: '🍎', nome: 'Frutas' },
+  { e: '🧊', nome: 'Congelados' },
+  { e: '❄️', nome: 'Frios' },
+  { e: '🧂', nome: 'Mercearia' },
+  { e: '🍝', nome: 'Massas' },
+  { e: '🥫', nome: 'Enlatados' },
+  { e: '🍞', nome: 'Matinais' },
+  { e: '🍬', nome: 'Doces' },
+  { e: '🧹', nome: 'Limpeza' },
+  { e: '🧴', nome: 'Higiene' },
+  { e: '🐶', nome: 'Pet' },
+  { e: '👶', nome: 'Bebê' },
+  { e: '🍳', nome: 'Ovos' },
+  { e: '☕', nome: 'Café' },
+  { e: '🧽', nome: 'Utilidades' },
+  { e: '🍫', nome: 'Chocolates' },
+  { e: '📦', nome: 'Outros' },
+];
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function estadoInicial() {
+  return {
+    grupos: [
+      { id: uid(), nome: 'Açougue',    icone: '🥩', ordem: 0, colapsado: false },
+      { id: uid(), nome: 'Padaria',    icone: '🥖', ordem: 1, colapsado: false },
+      { id: uid(), nome: 'Hortifruti', icone: '🥬', ordem: 2, colapsado: false },
+      { id: uid(), nome: 'Laticínios', icone: '🧀', ordem: 3, colapsado: false },
+      { id: uid(), nome: 'Mercearia',  icone: '🧂', ordem: 4, colapsado: false },
+      { id: uid(), nome: 'Bebidas',    icone: '🥤', ordem: 5, colapsado: false },
+      { id: uid(), nome: 'Limpeza',    icone: '🧹', ordem: 6, colapsado: false },
+      { id: uid(), nome: 'Higiene',    icone: '🧴', ordem: 7, colapsado: false },
+    ],
+    produtos: [],
+    filtros: { precisaComprar: false, faltamCarrinho: false, jaCarrinho: false }
+  };
+}
+
+function carregarEstado() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return estadoInicial();
+    const s = JSON.parse(raw);
+    if (!Array.isArray(s.grupos) || !Array.isArray(s.produtos)) return estadoInicial();
+    if (!s.filtros) s.filtros = { precisaComprar: false, faltamCarrinho: false, jaCarrinho: false };
+    return s;
+  } catch {
+    return estadoInicial();
+  }
+}
+
+function salvarEstado() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  agendarSync();
+}
+
+let state = carregarEstado();
+
+function calcularComprar(p) {
+  return Math.max(0, (p.estoqueIdeal || 0) - (p.estoqueAtual || 0));
+}
+
+function passaFiltros(p) {
+  const f = state.filtros;
+  const comprar = calcularComprar(p);
+  if (f.precisaComprar && comprar <= 0) return false;
+  if (f.faltamCarrinho && p.noCarrinho) return false;
+  if (f.jaCarrinho && !p.noCarrinho) return false;
+  return true;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = String(s ?? '');
+  return div.innerHTML;
+}
+
+function ordenarGrupos() {
+  return [...state.grupos].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+}
+
+function render() {
+  renderFiltros();
+  renderLista();
+  renderResumo();
+}
+
+function renderFiltros() {
+  ['precisaComprar', 'faltamCarrinho', 'jaCarrinho'].forEach(k => {
+    const el = document.querySelector(`[data-filtro="${k}"]`);
+    if (el) el.classList.toggle('ativo', !!state.filtros[k]);
+  });
+  const algumAtivo = Object.values(state.filtros).some(v => v);
+  document.getElementById('btn-limpar-filtros').style.display = algumAtivo ? '' : 'none';
+}
+
+function renderResumo() {
+  const total = state.produtos.length;
+  const comprar = state.produtos.reduce((s, p) => s + (calcularComprar(p) > 0 ? 1 : 0), 0);
+  const carrinho = state.produtos.filter(p => p.noCarrinho).length;
+  document.getElementById('resumo-total').textContent = total;
+  document.getElementById('resumo-comprar').textContent = comprar;
+  document.getElementById('resumo-carrinho').textContent = carrinho;
+}
+
+function renderLista() {
+  const main = document.getElementById('lista');
+  main.innerHTML = '';
+
+  if (state.grupos.length === 0) {
+    main.innerHTML = `
+      <div class="empty-state">
+        <div class="icone-grande">📂</div>
+        <p>Você ainda não tem grupos cadastrados.<br>Comece criando categorias como Açougue, Padaria, Bebidas...</p>
+        <button class="btn-primario" onclick="abrirModalGrupos()">Criar primeiro grupo</button>
+      </div>`;
+    return;
+  }
+
+  if (state.produtos.length === 0) {
+    main.innerHTML = `
+      <div class="empty-state">
+        <div class="icone-grande">🛒</div>
+        <p>Nenhum produto cadastrado ainda.<br>Adicione produtos com a quantidade ideal de estoque que você quer ter em casa.</p>
+        <button class="btn-primario" onclick="abrirModalProduto()">Cadastrar primeiro produto</button>
+      </div>`;
+    return;
+  }
+
+  const algumFiltro = Object.values(state.filtros).some(v => v);
+  const grupos = ordenarGrupos();
+  let exibidos = 0;
+
+  for (const g of grupos) {
+    const produtosGrupo = state.produtos.filter(p => p.grupoId === g.id);
+    const produtosVisiveis = produtosGrupo.filter(passaFiltros);
+
+    if (algumFiltro && produtosVisiveis.length === 0) continue;
+    if (produtosGrupo.length === 0 && algumFiltro) continue;
+
+    exibidos++;
+
+    const card = document.createElement('div');
+    card.className = 'grupo-card' + (g.colapsado ? '' : ' aberto');
+
+    const header = document.createElement('button');
+    header.className = 'grupo-header';
+    header.innerHTML = `
+      <span class="grupo-icone">${escapeHtml(g.icone || '📦')}</span>
+      <span class="grupo-nome">${escapeHtml(g.nome)}</span>
+      <span class="grupo-contagem">${algumFiltro ? produtosVisiveis.length + '/' + produtosGrupo.length : produtosGrupo.length}</span>
+      <span class="grupo-seta">${g.colapsado ? '▶' : '▼'}</span>
+    `;
+    header.onclick = () => toggleGrupo(g.id);
+    card.appendChild(header);
+
+    if (!g.colapsado) {
+      const lista = document.createElement('div');
+      lista.className = 'grupo-produtos';
+      if (produtosVisiveis.length === 0) {
+        lista.innerHTML = `<p class="empty-grupo">${produtosGrupo.length === 0 ? 'Nenhum produto neste grupo.' : 'Nenhum produto bate com os filtros ativos.'}</p>`;
+      } else {
+        produtosVisiveis
+          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+          .forEach(p => lista.appendChild(renderProduto(p)));
+      }
+      card.appendChild(lista);
+    }
+    main.appendChild(card);
+  }
+
+  if (exibidos === 0) {
+    const aviso = document.createElement('div');
+    aviso.className = 'empty-state';
+    aviso.innerHTML = `
+      <div class="icone-grande">🔍</div>
+      <p>Nenhum produto corresponde aos filtros ativos.</p>
+      <button class="btn-primario" onclick="limparFiltros()">Limpar filtros</button>`;
+    main.appendChild(aviso);
+  }
+}
+
+function renderProduto(p) {
+  const comprar = calcularComprar(p);
+  const el = document.createElement('div');
+  el.className = 'produto';
+  if (p.noCarrinho) el.classList.add('no-carrinho');
+  else if (comprar > 0) el.classList.add('precisa-comprar');
+
+  el.innerHTML = `
+    <div class="produto-linha1">
+      <span class="produto-nome">${escapeHtml(p.nome)}</span>
+      <button class="btn-icone" data-acao="editar" data-id="${p.id}" aria-label="Editar">✏️</button>
+      <button class="btn-icone" data-acao="excluir" data-id="${p.id}" aria-label="Excluir">🗑️</button>
+    </div>
+    <div class="produto-linha2">
+      <div class="controle-qtd">
+        <button class="btn-qtd" data-acao="dec" data-id="${p.id}" aria-label="Diminuir">−</button>
+        <span class="qtd-atual">${p.estoqueAtual}</span>
+        <button class="btn-qtd" data-acao="inc" data-id="${p.id}" aria-label="Aumentar">+</button>
+      </div>
+      <div class="info-stock">
+        <span class="info-label">Ideal</span>
+        <span class="info-val">${p.estoqueIdeal}</span>
+      </div>
+      <div class="info-comprar${comprar > 0 ? ' destaque' : ''}">
+        <span class="info-label">Comprar</span>
+        <span class="info-val">${comprar}</span>
+      </div>
+      <button class="check${p.noCarrinho ? ' marcado' : ''}" data-acao="check" data-id="${p.id}" aria-label="Marcar carrinho">${p.noCarrinho ? '✓' : ''}</button>
+    </div>
+  `;
+  return el;
+}
+
+document.getElementById('lista').addEventListener('click', e => {
+  const btn = e.target.closest('[data-acao]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  switch (btn.dataset.acao) {
+    case 'inc': alterarAtual(id, 1); break;
+    case 'dec': alterarAtual(id, -1); break;
+    case 'check': toggleCarrinho(id); break;
+    case 'editar': abrirModalProduto(id); break;
+    case 'excluir': excluirProduto(id); break;
+  }
+});
+
+function alterarAtual(id, delta) {
+  const p = state.produtos.find(x => x.id === id);
+  if (!p) return;
+  p.estoqueAtual = Math.max(0, (p.estoqueAtual || 0) + delta);
+  salvarEstado();
+  render();
+}
+
+function toggleCarrinho(id) {
+  const p = state.produtos.find(x => x.id === id);
+  if (!p) return;
+  p.noCarrinho = !p.noCarrinho;
+  salvarEstado();
+  render();
+}
+
+function toggleGrupo(id) {
+  const g = state.grupos.find(x => x.id === id);
+  if (!g) return;
+  g.colapsado = !g.colapsado;
+  salvarEstado();
+  render();
+}
+
+function toggleFiltro(nome) {
+  state.filtros[nome] = !state.filtros[nome];
+  if (nome === 'faltamCarrinho' && state.filtros.faltamCarrinho) state.filtros.jaCarrinho = false;
+  if (nome === 'jaCarrinho' && state.filtros.jaCarrinho) state.filtros.faltamCarrinho = false;
+  salvarEstado();
+  render();
+}
+
+function limparFiltros() {
+  state.filtros = { precisaComprar: false, faltamCarrinho: false, jaCarrinho: false };
+  salvarEstado();
+  render();
+}
+
+function expandirTudo() {
+  state.grupos.forEach(g => g.colapsado = false);
+  salvarEstado(); render(); fecharMenu();
+}
+
+function recolherTudo() {
+  state.grupos.forEach(g => g.colapsado = true);
+  salvarEstado(); render(); fecharMenu();
+}
+
+function zerarCarrinho() {
+  fecharMenu();
+  if (!confirm('Desmarcar TODOS os itens do carrinho? Use isso quando começar uma nova compra.')) return;
+  state.produtos.forEach(p => p.noCarrinho = false);
+  salvarEstado(); render();
+}
+
+function zerarEstoqueAtual() {
+  fecharMenu();
+  if (!confirm('Zerar a quantidade ATUAL de todos os produtos? Use antes de fazer a contagem em casa.')) return;
+  state.produtos.forEach(p => p.estoqueAtual = 0);
+  salvarEstado(); render();
+}
+
+function excluirProduto(id) {
+  const p = state.produtos.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`Excluir o produto "${p.nome}"?`)) return;
+  state.produtos = state.produtos.filter(x => x.id !== id);
+  salvarEstado(); render();
+}
+
+/* ===== MENU ===== */
+function toggleMenu(e) {
+  e.stopPropagation();
+  document.getElementById('menu-dropdown').classList.toggle('aberto');
+}
+function fecharMenu() {
+  document.getElementById('menu-dropdown').classList.remove('aberto');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#menu-dropdown') && !e.target.closest('[onclick*="toggleMenu"]')) fecharMenu();
+});
+
+/* ===== MODAL: PRODUTO ===== */
+function abrirModalProduto(idEditar) {
+  if (state.grupos.length === 0) {
+    alert('Crie ao menos um grupo antes de cadastrar produtos.');
+    abrirModalGrupos();
+    return;
+  }
+  const p = idEditar ? state.produtos.find(x => x.id === idEditar) : null;
+  const titulo = p ? 'Editar produto' : 'Novo produto';
+  const opcoesGrupo = ordenarGrupos().map(g =>
+    `<option value="${g.id}" ${p && p.grupoId === g.id ? 'selected' : ''}>${escapeHtml(g.icone + ' ' + g.nome)}</option>`
+  ).join('');
+
+  abrirModal(`
+    <h2 class="modal-titulo">${titulo}<button onclick="fecharModal()" aria-label="Fechar">✕</button></h2>
+    <form id="form-produto">
+      <div class="form-grupo">
+        <label for="prod-nome">Nome do produto</label>
+        <input id="prod-nome" type="text" required maxlength="80" value="${p ? escapeHtml(p.nome) : ''}" placeholder="Ex: Arroz 5kg">
+      </div>
+      <div class="form-grupo">
+        <label for="prod-grupo">Grupo</label>
+        <select id="prod-grupo" required>${opcoesGrupo}</select>
+      </div>
+      <div class="form-grupo">
+        <label for="prod-ideal">Quantidade ideal (estoque que sempre quero ter)</label>
+        <input id="prod-ideal" type="number" min="0" max="999" required value="${p ? p.estoqueIdeal : 1}">
+      </div>
+      <div class="form-grupo">
+        <label for="prod-atual">Quantidade atual em casa</label>
+        <input id="prod-atual" type="number" min="0" max="999" required value="${p ? p.estoqueAtual : 0}">
+      </div>
+      <div class="modal-acoes">
+        <button type="button" class="btn-secundario" onclick="fecharModal()">Cancelar</button>
+        <button type="submit" class="btn-primario">Salvar</button>
+      </div>
+    </form>
+  `);
+
+  document.getElementById('form-produto').addEventListener('submit', e => {
+    e.preventDefault();
+    const nome = document.getElementById('prod-nome').value.trim();
+    const grupoId = document.getElementById('prod-grupo').value;
+    const estoqueIdeal = parseInt(document.getElementById('prod-ideal').value, 10) || 0;
+    const estoqueAtual = parseInt(document.getElementById('prod-atual').value, 10) || 0;
+    if (!nome) return;
+    if (p) {
+      p.nome = nome;
+      p.grupoId = grupoId;
+      p.estoqueIdeal = estoqueIdeal;
+      p.estoqueAtual = estoqueAtual;
+    } else {
+      state.produtos.push({
+        id: uid(), nome, grupoId, estoqueIdeal, estoqueAtual, noCarrinho: false
+      });
+    }
+    salvarEstado();
+    fecharModal();
+    render();
+  });
+}
+
+/* ===== MODAL: GRUPOS ===== */
+let emojiSelecionadoNovoGrupo = '📦';
+
+function abrirModalGrupos() {
+  fecharMenu();
+  const grupos = ordenarGrupos();
+  const listaHtml = grupos.length === 0
+    ? '<p class="empty-grupo">Nenhum grupo cadastrado ainda.</p>'
+    : grupos.map((g, i) => `
+        <div class="item-grupo" data-id="${g.id}">
+          <span class="emoji-show">${escapeHtml(g.icone)}</span>
+          <input class="nome-input" type="text" value="${escapeHtml(g.nome)}" maxlength="40" data-id="${g.id}" data-campo="nome">
+          <div class="acoes">
+            <button type="button" data-acao-g="emoji" data-id="${g.id}" aria-label="Mudar ícone">🎨</button>
+            <button type="button" data-acao-g="subir" data-id="${g.id}" aria-label="Subir" ${i === 0 ? 'disabled style="opacity:0.3"' : ''}>↑</button>
+            <button type="button" data-acao-g="descer" data-id="${g.id}" aria-label="Descer" ${i === grupos.length - 1 ? 'disabled style="opacity:0.3"' : ''}>↓</button>
+            <button type="button" data-acao-g="excluir" data-id="${g.id}" aria-label="Excluir">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+
+  const emojisHtml = EMOJIS_PADRAO.map(opt => `
+    <button type="button" class="emoji-opt${opt.e === emojiSelecionadoNovoGrupo ? ' selecionado' : ''}" data-emoji="${opt.e}" title="${opt.nome}" onclick="selecionarEmojiNovo('${opt.e}')">${opt.e}</button>
+  `).join('');
+
+  abrirModal(`
+    <h2 class="modal-titulo">Gerenciar grupos<button onclick="fecharModal()" aria-label="Fechar">✕</button></h2>
+    <div class="lista-grupos" id="lista-grupos">${listaHtml}</div>
+
+    <h3 style="margin: 18px 0 8px 0; font-size: 15px;">Novo grupo</h3>
+    <div class="form-grupo">
+      <label>Escolha um ícone</label>
+      <div class="emoji-grid" id="emoji-grid">${emojisHtml}</div>
+      <input class="emoji-custom" id="emoji-custom" type="text" maxlength="4" placeholder="Ou cole outro emoji aqui" value="">
+    </div>
+    <form id="form-grupo-novo">
+      <div class="form-grupo">
+        <label for="grupo-nome">Nome do grupo</label>
+        <input id="grupo-nome" type="text" required maxlength="40" placeholder="Ex: Petshop">
+      </div>
+      <div class="modal-acoes">
+        <button type="button" class="btn-secundario" onclick="fecharModal()">Fechar</button>
+        <button type="submit" class="btn-primario">+ Adicionar grupo</button>
+      </div>
+    </form>
+  `);
+
+  document.getElementById('lista-grupos').addEventListener('click', onAcaoGrupo);
+  document.getElementById('lista-grupos').addEventListener('change', e => {
+    const inp = e.target.closest('input[data-campo="nome"]');
+    if (!inp) return;
+    const g = state.grupos.find(x => x.id === inp.dataset.id);
+    if (!g) return;
+    const novo = inp.value.trim();
+    if (!novo) { inp.value = g.nome; return; }
+    g.nome = novo;
+    salvarEstado(); render();
+  });
+
+  document.getElementById('form-grupo-novo').addEventListener('submit', e => {
+    e.preventDefault();
+    const nome = document.getElementById('grupo-nome').value.trim();
+    if (!nome) return;
+    const custom = document.getElementById('emoji-custom').value.trim();
+    const icone = custom || emojiSelecionadoNovoGrupo || '📦';
+    const ordem = state.grupos.length > 0 ? Math.max(...state.grupos.map(g => g.ordem ?? 0)) + 1 : 0;
+    state.grupos.push({ id: uid(), nome, icone, ordem, colapsado: false });
+    salvarEstado();
+    abrirModalGrupos();
+    render();
+  });
+}
+
+function selecionarEmojiNovo(emoji) {
+  emojiSelecionadoNovoGrupo = emoji;
+  document.querySelectorAll('#emoji-grid .emoji-opt').forEach(b => {
+    b.classList.toggle('selecionado', b.dataset.emoji === emoji);
+  });
+  document.getElementById('emoji-custom').value = '';
+}
+
+function onAcaoGrupo(e) {
+  const btn = e.target.closest('[data-acao-g]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const g = state.grupos.find(x => x.id === id);
+  if (!g) return;
+
+  switch (btn.dataset.acaoG) {
+    case 'subir': moverGrupo(id, -1); break;
+    case 'descer': moverGrupo(id, 1); break;
+    case 'excluir': excluirGrupo(id); break;
+    case 'emoji': mudarEmojiGrupo(id); break;
+  }
+}
+
+function moverGrupo(id, delta) {
+  const grupos = ordenarGrupos();
+  const idx = grupos.findIndex(g => g.id === id);
+  const novoIdx = idx + delta;
+  if (novoIdx < 0 || novoIdx >= grupos.length) return;
+  const a = grupos[idx], b = grupos[novoIdx];
+  const tmp = a.ordem; a.ordem = b.ordem; b.ordem = tmp;
+  salvarEstado();
+  abrirModalGrupos();
+  render();
+}
+
+function excluirGrupo(id) {
+  const g = state.grupos.find(x => x.id === id);
+  if (!g) return;
+  const produtosDoGrupo = state.produtos.filter(p => p.grupoId === id);
+  if (produtosDoGrupo.length > 0) {
+    if (!confirm(`O grupo "${g.nome}" tem ${produtosDoGrupo.length} produto(s). Excluir o grupo E todos os produtos dele?`)) return;
+    state.produtos = state.produtos.filter(p => p.grupoId !== id);
+  } else {
+    if (!confirm(`Excluir o grupo "${g.nome}"?`)) return;
+  }
+  state.grupos = state.grupos.filter(x => x.id !== id);
+  salvarEstado();
+  abrirModalGrupos();
+  render();
+}
+
+function mudarEmojiGrupo(id) {
+  const g = state.grupos.find(x => x.id === id);
+  if (!g) return;
+  const novo = prompt(`Novo ícone para "${g.nome}" (cole um emoji):`, g.icone);
+  if (!novo) return;
+  g.icone = novo.trim().slice(0, 4);
+  salvarEstado();
+  abrirModalGrupos();
+  render();
+}
+
+/* ===== MODAL HELPERS ===== */
+function abrirModal(html) {
+  const ov = document.getElementById('modal-overlay');
+  ov.innerHTML = `<div class="modal">${html}</div>`;
+  ov.classList.add('aberto');
+  ov.onclick = e => { if (e.target === ov) fecharModal(); };
+}
+function fecharModal() {
+  const ov = document.getElementById('modal-overlay');
+  ov.classList.remove('aberto');
+  ov.innerHTML = '';
+}
+
+/* ===== EXPORT/IMPORT ===== */
+function exportarJSON() {
+  fecharMenu();
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lista-facil-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importarJSON() {
+  fecharMenu();
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json,.json';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const novo = JSON.parse(reader.result);
+        if (!Array.isArray(novo.grupos) || !Array.isArray(novo.produtos)) throw new Error('Arquivo não é uma exportação válida.');
+        if (!confirm(`Importar ${novo.grupos.length} grupo(s) e ${novo.produtos.length} produto(s)? Isso SUBSTITUI todos os dados atuais.`)) return;
+        state = novo;
+        if (!state.filtros) state.filtros = { precisaComprar: false, faltamCarrinho: false, jaCarrinho: false };
+        salvarEstado();
+        render();
+        alert('Importação concluída.');
+      } catch (err) {
+        alert('Erro ao importar: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+/* ===== AUTENTICAÇÃO (Supabase) ===== */
+
+let modoAuth = 'login';
+
+function mostrarMensagem(texto, tipo) {
+  const el = document.getElementById('login-msg');
+  el.textContent = texto;
+  el.classList.remove('sucesso', 'info');
+  if (tipo === 'sucesso') el.classList.add('sucesso');
+  else if (tipo === 'info') el.classList.add('info');
+  el.style.display = texto ? '' : 'none';
+}
+function limparMensagem() {
+  document.getElementById('login-msg').style.display = 'none';
+}
+
+function definirModoAuth(modo) {
+  modoAuth = modo;
+  const btnSubmit = document.getElementById('btn-submit-auth');
+  const subtitulo = document.getElementById('login-subtitulo');
+  const rodapeTxt = document.getElementById('login-rodape-texto');
+  const btnToggle = document.getElementById('btn-toggle-modo');
+  const inpSenha  = document.getElementById('login-senha');
+
+  if (modo === 'cadastro') {
+    btnSubmit.textContent = 'Criar conta';
+    subtitulo.textContent = 'Crie sua conta para sincronizar suas listas';
+    rodapeTxt.textContent = 'Já tem conta?';
+    btnToggle.textContent = 'Entrar';
+    inpSenha.setAttribute('autocomplete', 'new-password');
+    inpSenha.setAttribute('minlength', '6');
+    inpSenha.placeholder = 'Mínimo 6 caracteres';
+  } else {
+    btnSubmit.textContent = 'Entrar';
+    subtitulo.textContent = 'Lista de compras pessoal';
+    rodapeTxt.textContent = 'Primeiro acesso?';
+    btnToggle.textContent = 'Criar conta';
+    inpSenha.setAttribute('autocomplete', 'current-password');
+    inpSenha.removeAttribute('minlength');
+    inpSenha.placeholder = 'Sua senha';
+  }
+  limparMensagem();
+}
+
+function mostrarTelaLogin() {
+  document.getElementById('tela-login').style.display = 'flex';
+  document.body.classList.add('com-login');
+  definirModoAuth('login');
+  document.getElementById('login-senha').value = '';
+  setTimeout(() => {
+    const inp = document.getElementById('login-usuario');
+    if (inp.value) document.getElementById('login-senha').focus();
+    else inp.focus();
+  }, 100);
+}
+
+function ocultarTelaLogin() {
+  document.getElementById('tela-login').style.display = 'none';
+  document.body.classList.remove('com-login');
+}
+
+function traduzirErroSupabase(msg) {
+  msg = String(msg || '');
+  if (/invalid login credentials/i.test(msg)) return 'Email ou senha incorretos.';
+  if (/email not confirmed/i.test(msg)) return 'Email ainda não confirmado. Verifique sua caixa de entrada.';
+  if (/already registered|user already exists/i.test(msg)) return 'Esse email já tem conta. Faça login.';
+  if (/password should be at least/i.test(msg)) return 'A senha precisa ter pelo menos 6 caracteres.';
+  if (/unable to validate email/i.test(msg) || /invalid email/i.test(msg)) return 'Email inválido.';
+  if (/over.*rate.*limit/i.test(msg) || /too many requests/i.test(msg)) return 'Muitas tentativas, aguarde um momento.';
+  if (/network|failed to fetch/i.test(msg)) return 'Sem conexão. Verifique sua internet.';
+  return msg;
+}
+
+async function aposLogin(user) {
+  currentUser = user;
+  document.getElementById('menu-usuario-email').textContent = user.email || '—';
+  await carregarDaNuvem();
+  ocultarTelaLogin();
+  render();
+}
+
+async function carregarDaNuvem() {
+  marcarSync('sincronizando', 'Carregando…');
+  const [{ data: gruposCloud, error: errG }, { data: produtosCloud, error: errP }] = await Promise.all([
+    sb.from('grupos').select('*').order('ordem', { ascending: true }),
+    sb.from('produtos').select('*')
+  ]);
+  if (errG || errP) {
+    console.error('Erro ao carregar da nuvem:', errG || errP);
+    marcarSync('erro', 'Erro ao carregar da nuvem');
+    return;
+  }
+
+  const cloudVazio = gruposCloud.length === 0 && produtosCloud.length === 0;
+  const temProdutosLocais = state.produtos.length > 0;
+
+  if (cloudVazio && temProdutosLocais) {
+    // Usuário com dados de verdade — pergunta antes de subir
+    const subir = confirm(
+      `Você já tem ${state.grupos.length} grupo(s) e ${state.produtos.length} produto(s) salvos neste aparelho.\n\n` +
+      `Subir esses dados pra sua conta na nuvem agora?\n\n` +
+      `OK = subir os dados locais\nCancelar = começar com lista vazia`
+    );
+    if (subir) {
+      await sincronizarNuvem(true);
+      return;
+    } else {
+      state.grupos = [];
+      state.produtos = [];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      marcarSync('', '');
+      return;
+    }
+  }
+
+  if (cloudVazio && !temProdutosLocais) {
+    // Conta nova — sobe silenciosamente os grupos padrão pra iniciar
+    await sincronizarNuvem(true);
+    return;
+  }
+
+  state.grupos = gruposCloud.map(g => ({
+    id: g.id, nome: g.nome, icone: g.icone, ordem: g.ordem, colapsado: g.colapsado
+  }));
+  state.produtos = produtosCloud.map(p => ({
+    id: p.id, grupoId: p.grupo_id, nome: p.nome,
+    estoqueIdeal: p.estoque_ideal, estoqueAtual: p.estoque_atual,
+    noCarrinho: p.no_carrinho
+  }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  marcarSync('', '');
+}
+
+let syncTimer = null;
+let sincronizando = false;
+let sincronizarNovamente = false;
+
+function agendarSync() {
+  if (!currentUser) return;
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => sincronizarNuvem(false), 400);
+}
+
+async function sincronizarNuvem(forcarLeitura) {
+  if (!currentUser) return;
+  if (sincronizando) { sincronizarNovamente = true; return; }
+  sincronizando = true;
+  syncTimer = null;
+  marcarSync('sincronizando', 'Sincronizando…');
+
+  try {
+    const uid = currentUser.id;
+
+    const [{ data: gC, error: errGC }, { data: pC, error: errPC }] = await Promise.all([
+      sb.from('grupos').select('id'),
+      sb.from('produtos').select('id')
+    ]);
+    if (errGC || errPC) throw (errGC || errPC);
+
+    const localGruposIds = new Set(state.grupos.map(g => g.id));
+    const localProdutosIds = new Set(state.produtos.map(p => p.id));
+    const gruposParaApagar   = (gC || []).filter(r => !localGruposIds.has(r.id)).map(r => r.id);
+    const produtosParaApagar = (pC || []).filter(r => !localProdutosIds.has(r.id)).map(r => r.id);
+
+    if (produtosParaApagar.length) {
+      const { error } = await sb.from('produtos').delete().in('id', produtosParaApagar);
+      if (error) throw error;
+    }
+    if (gruposParaApagar.length) {
+      const { error } = await sb.from('grupos').delete().in('id', gruposParaApagar);
+      if (error) throw error;
+    }
+
+    if (state.grupos.length) {
+      const rows = state.grupos.map(g => ({
+        id: g.id, user_id: uid,
+        nome: g.nome, icone: g.icone || '📦',
+        ordem: g.ordem ?? 0, colapsado: !!g.colapsado,
+        updated_at: new Date().toISOString()
+      }));
+      const { error } = await sb.from('grupos').upsert(rows);
+      if (error) throw error;
+    }
+    if (state.produtos.length) {
+      const rows = state.produtos.map(p => ({
+        id: p.id, user_id: uid, grupo_id: p.grupoId,
+        nome: p.nome,
+        estoque_ideal: p.estoqueIdeal ?? 0,
+        estoque_atual: p.estoqueAtual ?? 0,
+        no_carrinho: !!p.noCarrinho,
+        updated_at: new Date().toISOString()
+      }));
+      const { error } = await sb.from('produtos').upsert(rows);
+      if (error) throw error;
+    }
+
+    marcarSync('', '');
+  } catch (err) {
+    console.error('Erro ao sincronizar:', err);
+    marcarSync('erro', 'Erro ao sincronizar — tentaremos de novo');
+  } finally {
+    sincronizando = false;
+    if (sincronizarNovamente) {
+      sincronizarNovamente = false;
+      setTimeout(() => sincronizarNuvem(false), 300);
+    }
+  }
+}
+
+function marcarSync(classe, titulo) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  el.className = 'sync-status' + (classe ? ' ' + classe : '');
+  el.title = titulo || '';
+}
+
+async function fazerLogout() {
+  fecharMenu();
+  if (!confirm('Sair da conta?')) return;
+  if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+  if (sincronizando) {
+    // espera o sync corrente acabar para não perder a última mudança
+    await new Promise(r => setTimeout(r, 500));
+  }
+  try { await sb.auth.signOut(); } catch (e) { console.warn(e); }
+  currentUser = null;
+  state = estadoInicial();
+  state.grupos = [];
+  state.produtos = [];
+  localStorage.removeItem(STORAGE_KEY);
+  render();
+  mostrarTelaLogin();
+}
+
+async function pedirReset() {
+  const email = document.getElementById('login-usuario').value.trim();
+  if (!email) {
+    mostrarMensagem('Digite seu email primeiro pra receber o link de recuperação.', 'info');
+    document.getElementById('login-usuario').focus();
+    return;
+  }
+  const btn = document.getElementById('btn-resetar');
+  btn.disabled = true;
+  try {
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) {
+      mostrarMensagem(traduzirErroSupabase(error.message));
+    } else {
+      mostrarMensagem(`Enviamos um link de recuperação para ${email}. Abra seu email e clique no link.`, 'sucesso');
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function tratarRecuperacaoSenha() {
+  // Se o usuário clicou no link de recuperação no email, o Supabase
+  // troca o token por uma sessão; aqui pedimos a nova senha.
+  const novaSenha = prompt('Recuperação de senha — digite sua NOVA senha (mínimo 6 caracteres):');
+  if (!novaSenha) {
+    alert('Recuperação cancelada. Faça login normalmente ou peça outro link.');
+    await sb.auth.signOut();
+    return false;
+  }
+  if (novaSenha.length < 6) {
+    alert('Senha muito curta. Tente o link de recuperação de novo.');
+    await sb.auth.signOut();
+    return false;
+  }
+  const { error } = await sb.auth.updateUser({ password: novaSenha });
+  if (error) {
+    alert('Erro ao atualizar senha: ' + traduzirErroSupabase(error.message));
+    await sb.auth.signOut();
+    return false;
+  }
+  alert('Senha atualizada! Você já está logado.');
+  return true;
+}
+
+document.getElementById('form-auth').addEventListener('submit', async e => {
+  e.preventDefault();
+  limparMensagem();
+  const email = document.getElementById('login-usuario').value.trim();
+  const senha = document.getElementById('login-senha').value;
+  if (!email || !senha) return;
+
+  const btn = document.getElementById('btn-submit-auth');
+  btn.disabled = true;
+  const textoOriginal = btn.textContent;
+  btn.textContent = modoAuth === 'cadastro' ? 'Criando…' : 'Entrando…';
+
+  try {
+    if (modoAuth === 'cadastro') {
+      if (senha.length < 6) {
+        mostrarMensagem('A senha precisa ter pelo menos 6 caracteres.');
+        return;
+      }
+      const { data, error } = await sb.auth.signUp({
+        email, password: senha,
+        options: { emailRedirectTo: window.location.origin + window.location.pathname }
+      });
+      if (error) {
+        mostrarMensagem(traduzirErroSupabase(error.message));
+        return;
+      }
+      if (data.session) {
+        // Conta nova: descarta qualquer estado local que pudesse ser de outro usuário
+        state = estadoInicial();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        // Login imediato (autoconfirm está ativo no projeto)
+        await aposLogin(data.user);
+      } else {
+        // Precisa confirmar email
+        mostrarMensagem(
+          `Conta criada! Enviamos um link de confirmação para ${email}. ` +
+          `Abra o email e clique no link para ativar — depois volte aqui e faça login.`,
+          'sucesso'
+        );
+        definirModoAuth('login');
+        document.getElementById('login-senha').value = '';
+      }
+    } else {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+      if (error) {
+        mostrarMensagem(traduzirErroSupabase(error.message));
+        return;
+      }
+      await aposLogin(data.user);
+    }
+  } catch (err) {
+    console.error(err);
+    mostrarMensagem(traduzirErroSupabase(err.message || String(err)));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+});
+
+document.getElementById('btn-toggle-modo').addEventListener('click', () => {
+  definirModoAuth(modoAuth === 'login' ? 'cadastro' : 'login');
+});
+
+document.getElementById('btn-resetar').addEventListener('click', pedirReset);
+
+document.getElementById('btn-mostrar-senha').addEventListener('click', () => {
+  const inp = document.getElementById('login-senha');
+  const btn = document.getElementById('btn-mostrar-senha');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    inp.type = 'password';
+    btn.textContent = '👁️';
+  }
+});
+
+// Boot: checa sessão atual e decide se mostra login ou app
+(async function boot() {
+  const ehRecuperacao = window.location.hash.includes('type=recovery');
+
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      // Limpa o hash da URL pra não re-disparar em refresh
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      mostrarTelaLogin();
+      const ok = await tratarRecuperacaoSenha();
+      if (ok) {
+        const { data: { session: s } } = await sb.auth.getSession();
+        if (s) await aposLogin(s.user);
+        else mostrarTelaLogin();
+      } else {
+        mostrarTelaLogin();
+      }
+      return;
+    }
+    if (event === 'SIGNED_OUT') {
+      if (currentUser) {
+        currentUser = null;
+        state = { grupos: [], produtos: [], filtros: { precisaComprar: false, faltamCarrinho: false, jaCarrinho: false } };
+        localStorage.removeItem(STORAGE_KEY);
+        render();
+        mostrarTelaLogin();
+      }
+    }
+  });
+
+  if (ehRecuperacao) {
+    // Não loga normalmente — espera o evento PASSWORD_RECOVERY acima
+    render();
+    mostrarTelaLogin();
+    return;
+  }
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    await aposLogin(session.user);
+  } else {
+    render();
+    mostrarTelaLogin();
+  }
+})();
+
+/* ===== PWA: Service worker + install prompt ===== */
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => { /* silencioso */ });
+  });
+}
+
+let deferredInstallPrompt = null;
+const DICA_IOS_KEY = 'listaCompras:dicaIosOculta';
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  document.getElementById('btn-instalar').classList.add('disponivel');
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  document.getElementById('btn-instalar').classList.remove('disponivel');
+});
+
+function instalarApp() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.finally(() => {
+    deferredInstallPrompt = null;
+    document.getElementById('btn-instalar').classList.remove('disponivel');
+  });
+}
+
+(function mostrarDicaIOSSeAplicavel() {
+  const ua = navigator.userAgent || '';
+  const ehIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const ehSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+  const standalone = window.navigator.standalone === true ||
+                     window.matchMedia('(display-mode: standalone)').matches;
+  const jaOcultou = localStorage.getItem(DICA_IOS_KEY) === '1';
+  if (ehIOS && ehSafari && !standalone && !jaOcultou) {
+    setTimeout(() => document.getElementById('ios-dica').classList.add('visivel'), 1500);
+  }
+})();
+
+function fecharDicaIOS() {
+  document.getElementById('ios-dica').classList.remove('visivel');
+  localStorage.setItem(DICA_IOS_KEY, '1');
+}
+</script>
+</body>
+</html>

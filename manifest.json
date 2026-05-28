@@ -1,0 +1,29 @@
+{
+  "name": "Lista Fácil — Lista de Compras",
+  "short_name": "Lista Fácil",
+  "description": "Lista de compras inteligente baseada em estoque ideal da casa.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0ABAB5",
+  "theme_color": "#0ABAB5",
+  "categories": ["productivity", "shopping", "lifestyle"],
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

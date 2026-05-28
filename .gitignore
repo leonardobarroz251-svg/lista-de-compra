@@ -1,0 +1,13 @@
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Local server / Node
+node_modules/
+package-lock.json
+
+# Logs
+*.log
