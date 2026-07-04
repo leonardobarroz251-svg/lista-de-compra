@@ -1,4 +1,4 @@
-const CACHE = 'lista-facil-v3';
+const CACHE = 'lista-facil-v4';
 const ASSETS = [
   './',
   './index.html',

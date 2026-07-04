@@ -1248,7 +1248,14 @@ function traduzirErroSupabase(msg) {
   if (/password should be at least/i.test(msg)) return 'A senha precisa ter pelo menos 6 caracteres.';
   if (/unable to validate email/i.test(msg) || /invalid email/i.test(msg)) return 'Email inválido.';
   if (/over.*rate.*limit/i.test(msg) || /too many requests/i.test(msg)) return 'Muitas tentativas, aguarde um momento.';
-  if (/network|failed to fetch/i.test(msg)) return 'Sem conexão. Verifique sua internet.';
+  if (/network|failed to fetch|load failed/i.test(msg)) {
+    // Se o navegador está online mas o fetch falhou, o problema é o servidor
+    // (projeto Supabase pausado/fora do ar), não a internet do usuário.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return 'Sem conexão. Verifique sua internet.';
+    }
+    return 'Servidor indisponível no momento. O banco de dados pode estar pausado — no plano gratuito o Supabase pausa o projeto após alguns dias sem uso. Reative-o no painel do Supabase e tente de novo em alguns minutos.';
+  }
   return msg;
 }
 
